@@ -11,7 +11,7 @@ Revised shell script for parsing .gnmap or .xml Nmap files to a CSV list, lists 
 # Example
 Script execution:
 ```
-# nmap -iL targets.txt -sS -Pn -n --open -oA results1 > /dev/null
+# nmap -iL targets.txt -sSV -Pn -n --open -oA results1 > /dev/null
 # ./nmaparse.sh results1.gnmap --out-dir test
 
 =======================[ nmaparse.sh by Ted R (github: actuated) ]=======================
