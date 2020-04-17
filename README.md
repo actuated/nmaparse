@@ -1,11 +1,11 @@
 # nmaparse
-Revised shell script for parsing .gnmap or .xml Nmap files to a CSV list, lists of IPs per port, web urls, and a summary table.
+Revised shell script for parsing .gnmap, .xml, or .nmap port scan results files to a CSV list, lists of IPs per port, web urls, and a summary table.
 
 # Usage
 ```
 ./nmaparse.sh [source file] [--out-dir [path]]
 ```
-- **[source file]** specifies the input file. The script will detect whether it's .gnmap or .xml based on whether `/open/` or `port protocol=` can be found.
+- **[source file]** specifies the input file. The script will detect the format based on finding `/open/` , `port protocol=`, or `Nmap scan report for`.
 - **[--out-dir [path]]** optionally specifies an output directory other than the default nmaparse-YYYY-MM-DD-HH-MM.
 
 # Example

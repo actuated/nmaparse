@@ -1,8 +1,9 @@
 #!/bin/bash
 #nmaparse.sh
 dateCreated="4/16/2020"
-dateLastMod="4/16/2020"
+dateLastMod="4/17/2020"
 # 04/16/2020 - Revised gnmap parsing to eliminate a temp file
+# 04/17/2020 - Added experimental support for .nmap files
 
 # Use these variables to control what TCP ports are checked for http and https web urls.
 webHttpPorts="80 8000 8080 9080"
@@ -18,7 +19,14 @@ function fnUsage {
   echo
   echo "========================================[ about ]========================================"
   echo
-  echo "Shell script for parsing gnmap and xml Nmap scan results. Creates:"
+  echo "Shell script for parsing Nmap scan results."
+  echo
+  echo "Detects source file format by checking for:"
+  echo "-'/open/' (gnmap)"
+  echo "-'port protocol=' (xml)"
+  echo "-'Nmap scan report for' (nmap)"
+  echo
+  echo "Creates:"
   echo "-CSV list of ip,protocol,port,name,version info"
   echo "-Lists of IPs for each port as [protocol]-[port]-hosts.txt"
   echo "-List of web urls for customizable lists of HTTP and HTTPS ports"
@@ -30,8 +38,7 @@ function fnUsage {
   echo
   echo "./nmaparse.sh [source file] [--out-dir [path]]"
   echo
-  echo "[source file]     Nmap output file to read from. Must be the first parameter. The script"
-  echo "                  will grep for '/open/' or 'port protocol=' to identify the format."
+  echo "[source file]     Nmap output file to read from. Must be the first parameter."
   echo
   echo "--out-dir [path]  Optionally specify an output directory. The default is"
   echo "                  nmaparse-YYYY-MM-DD-HH-MM/."
@@ -84,6 +91,33 @@ function fnGnmapToCsv {
   if [ -f "$outDir"/"working-csv-$thisYMDHM.txt" ]; then rm "$outDir"/"working-csv-$thisYMDHM.txt"; fi  
 }
 
+function fnNmapToCsv {
+  # Reduce file to lines that start hosts or contain open ports to eliminate reading unnecessary lines
+  grep 'Nmap scan report for \| open ' "$sourceFile" --color=never > "$outDir"/"working-src-$thisYMDHM.txt"
+  # Convert to CSV
+  while read -r thisLine; do
+    # Find start point for new host address
+    checkNewHost=$(echo "$thisLine" | grep "Nmap scan report for")
+    if [ "$checkNewHost" != "" ]; then
+      thisHost=$(echo "$thisLine" | awk '{print $NF}' | tr -d "()")
+    fi
+    # Find and parse port result
+    checkPortResult=$(echo "$thisLine" | grep '[[:digit:]]*/.* open ')
+    if [ "$checkPortResult" != "" ]; then
+      thisProto=$(echo "$thisLine" | awk '{print $1}' | awk -F / '{print $2}')
+      thisPort=$(echo "$thisLine" | awk '{print $1}' | awk -F / '{print $1}')
+      thisName=$(echo "$thisLine" | awk '{print $3}')
+      thisVersion=$(echo "$thisLine" | awk '{$1=$2=$3=""; print $0}' | sed 's/^ *//g' | awk -F \( '{print $1}')
+      echo "$thisHost,$thisProto,$thisPort,$thisName,$thisVersion" | sed 's/ $//g' | sed 's/,$//g' >> "$outDir"/"working-csv-$thisYMDHM.txt"
+    fi
+  done < "$outDir"/"working-src-$thisYMDHM.txt"
+  if [ -f "$outDir"/"working-src-$thisYMDHM.txt" ]; then rm "$outDir"/"working-src-$thisYMDHM.txt"; fi
+  # Convert unsorted working CSV into sorted final CSV
+  sort -Vu "$outDir"/"working-csv-$thisYMDHM.txt" | grep -v "tcpwrapped" > "$outDir"/"$csvFile"
+  if [ -f "$outDir"/"working-csv-$thisYMDHM.txt" ]; then rm "$outDir"/"working-csv-$thisYMDHM.txt"; fi
+}
+
+
 function fnCsvToLists {
   for thisUniqProtoPort in $(cat "$outDir"/"$csvFile" | awk -F , '{print $2 "," $3 ","}' | sort -Vu ); do
     thisProto=$(echo "$thisUniqProtoPort" | awk -F , '{print $1}')
@@ -102,11 +136,11 @@ function fnSummary {
     thisLineProto=""
     thisLineName=""
     thisLineSvc=""
-    thisLineHost=$(echo $thisLine | awk -F ',' '{print $1}')
-    thisLinePort=$(echo $thisLine | awk -F ',' '{print $3}')
-    thisLineProto=$(echo $thisLine | awk -F ',' '{print $2}')
-    thisLineName=$(echo $thisLine | awk -F ',' '{print $4}')
-    thisLineSvc=$(echo $thisLine | awk -F ',' '{print $5}')
+    thisLineHost=$(echo $thisLine | awk -F , '{print $1}')
+    thisLinePort=$(echo $thisLine | awk -F , '{print $3}')
+    thisLineProto=$(echo $thisLine | awk -F , '{print $2}')
+    thisLineName=$(echo $thisLine | awk -F , '{print $4}')
+    thisLineSvc=$(echo $thisLine | awk -F , '{print $5}')
     if [ "$thisLineHost" != "$lastHost" ]; then echo "+------------------+--------------+-----------------------------------------------------+" >> "$outDir"/"$summaryFile"; fi
     if [ "$thisLineSvc" = "" ]; then
       thisLineSvc=""
@@ -118,6 +152,7 @@ function fnSummary {
   done < "$outDir"/"$csvFile"
   echo "+------------------+--------------+-----------------------------------------------------+" >> "$outDir"/"$summaryFile"
 }
+
 echo
 echo "=======================[ nmaparse.sh by Ted R (github: actuated) ]======================="
 
@@ -133,17 +168,19 @@ if [ "$sourceFile" = "" ]; then
 fi
 
 # Check source file format
-checkGnmapResults=$(grep /open/ "$sourceFile")
+checkGnmapResults=$(grep '/open/' "$sourceFile")
 checkXmlResults=$(grep "port protocol=" "$sourceFile")
+checkNmapResults=$(grep "Nmap scan report for" "$sourceFile")
 sourceFormat="NOTSET"
 if [ "$checkGnmapResults" != "" ]; then
   sourceFormat="GNMAP"
 elif [ "$checkXmlResults" != "" ]; then
   sourceFormat="XML"
+elif [ "$checkNmapResults" != "" ]; then
+  sourceFormat="NMAP"
 else
   echo
-  echo "Error: Could not detect gnmap or xml results in $sourceFile."
-  echo "Checked for '/open/' (gnmap) and 'port protocol=' (xml)."
+  echo "Error: Could not gnmap, xml, or nmap results in $sourceFile."
   fnUsage
 fi
 
@@ -177,6 +214,8 @@ if [ "$sourceFormat" = "GNMAP" ]; then
   fnGnmapToCsv
 elif [ "$sourceFormat" = "XML" ]; then
   fnXmlToCsv
+elif [ "$sourceFormat" = "NMAP" ]; then
+  fnNmapToCsv
 fi
 echo " Done."
 
@@ -208,10 +247,12 @@ if [ -f "$outDir"/"$webUrlsFile" ]; then
 fi
 
 # Create a summary report
-echo
-echo -n "Creating summary report..."
-fnSummary
-echo " $summaryFile created."
+if [ -f "$outDir"/"$csvFile" ]; then
+  echo
+  echo -n "Creating summary report..."
+  fnSummary
+  echo " $summaryFile created."
+fi
 
 echo
 echo "=========================================[ fin ]========================================="
