@@ -2,6 +2,7 @@
 #nmaparse.sh
 dateCreated="4/16/2020"
 dateLastMod="4/16/2020"
+# 04/16/2020 - Revised gnmap parsing to eliminate a temp file
 
 # Use these variables to control what TCP ports are checked for http and https web urls.
 webHttpPorts="80 8000 8080 9080"
@@ -75,10 +76,7 @@ function fnGnmapToCsv {
     # Get host address
     thisHost=$(echo "$thisLine" | awk '{print $2}')
     # Parse open port results
-    if [ -f "$outDir"/"working-$thisHost-$thisYMDHM.txt" ]; then rm "$outDir"/"working-$thisHost-$thisYMDHM.txt"; fi
-    echo "$thisLine" | awk '{$1=$2=$3=$4=""; print $0}' | sed 's/\/,/\/\n/g' | sed 's/^ *//g' > "$outDir"/"working-$thisHost-$thisYMDHM.txt"
-    grep '/open/' "$outDir"/"working-$thisHost-$thisYMDHM.txt" | awk -v awkHost="$thisHost" -F / '{print awkHost "," $3 "," $1 "," $5 "," $7}' | awk -F \( '{print $1}' | sed 's/,$//g' >> "$outDir"/"working-csv-$thisYMDHM.txt"
-    if [ -f "$outDir"/"working-$thisHost-$thisYMDHM.txt" ]; then rm "$outDir"/"working-$thisHost-$thisYMDHM.txt"; fi
+    echo "$thisLine" | awk '{$1=$2=$3=$4=""; print $0}' | sed 's/\/,/\/\n/g' | sed 's/^ *//g' | grep '/open/' | awk -v awkHost="$thisHost" -F / '{print awkHost "," $3 "," $1 "," $5 "," $7}' | awk -F \( '{print $1}' | sed 's/,$//g' >> "$outDir"/"working-csv-$thisYMDHM.txt"
   done < "$outDir"/"working-src-$thisYMDHM.txt"
   if [ -f "$outDir"/"working-src-$thisYMDHM.txt" ]; then rm "$outDir"/"working-src-$thisYMDHM.txt"; fi
   # Convert unsorted working CSV into sorted final CSV
